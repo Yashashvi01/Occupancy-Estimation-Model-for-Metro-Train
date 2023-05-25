@@ -1,0 +1,65 @@
+import cv2
+import torch
+import numpy as np
+
+path = 'C:/Users/Yashashvi Mann/Desktop/metro/best_2.pt'
+
+model = torch.hub.load(r'C:/Users/Yashashvi Mann\Desktop/metro/yolov5', 'custom', path, force_reload=True, source='local')
+
+cap = cv2.VideoCapture("metro.mp4")
+if (cap.isOpened() == False): 
+    print("Error reading video file")
+
+def point_in_poly(x, y, poly1, poly2):
+    return cv2.pointPolygonTest(poly1, (x, y), False) >= 0 or cv2.pointPolygonTest(poly2, (x, y), False) >= 0
+
+roi_corners1 = np.array([[(140,119),(264,143),(352,169),(356,271),(313,304),(242,321),(175,230)]], dtype=np.int32)
+roi_corners2 = np.array([[(714,170),(882,158),(842,303),(653,291)]], dtype=np.int32)
+roi_color = (0, 255, 0)
+
+while True:
+    ret, frame = cap.read()
+    if not ret:
+        break
+
+    frame = cv2.resize(frame, (1020, 500))
+    results = model(frame)
+    frame = np.squeeze(results.render())
+
+    a = results.pandas().xyxy[0]
+    b = a.index.stop
+    count = int((b / 50) * 100)
+    cv2.putText(frame, "Space Occupied - " + str(count) + "%", (600, 480), cv2.FONT_HERSHEY_PLAIN, 2, (0, 255, 0), 2)
+
+    # Draw ROI rectangle
+    cv2.polylines(frame, roi_corners1, True, roi_color, thickness=2)
+    cv2.polylines(frame, roi_corners2, True, roi_color, thickness=2)
+
+    seat = []
+
+    for i, det in enumerate(results.xyxy[0]):
+        x1, y1, x2, y2, conf, cls = det.tolist()
+        center_x, center_y = int((x1 + x2) / 2), int((y1 + y2) / 2)
+        
+
+        if point_in_poly(center_x, center_y, roi_corners1, roi_corners2):
+            seat.append((center_x,center_y))
+            count_seat = len(seat)
+            #cv2.putText(frame, "Detected", (center_x - 10, center_y - 10), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
+            cv2.circle(frame, (center_x, center_y), 4, (0, 0, 255), -1)
+    
+    d = int((count_seat/6)*100)
+    if d>100:
+        d=100
+
+    # Show counts for both ROIs
+    cv2.putText(frame, " Seat Occupancy - " + str(d)+"%", (60, 480), cv2.FONT_HERSHEY_PLAIN, 2, (0,0,255), 2)
+
+    cv2.imshow("FRAME",frame)
+    if cv2.waitKey(1) & 0xFF == 27:
+        break
+
+
+cap.release()
+cv2.destroyAllWindows()
+
